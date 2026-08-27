@@ -3,345 +3,156 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<title>Test Micro Echo Show 15</title>
-
+<title>Test stabilité Micro Echo Show 15</title>
 <style>
-body {
-    font-family: Arial, sans-serif;
-    background: #10131a;
-    color: white;
-    text-align: center;
-    padding: 30px 15px;
-}
-
-.container {
-    max-width: 700px;
-    margin: auto;
-}
-
-h1 {
-    font-size: 32px;
-}
-
-.status {
-    font-size: 26px;
-    font-weight: bold;
-    margin: 25px;
-}
-
-.timer {
-    font-size: 48px;
-    font-weight: bold;
-    margin: 20px;
-}
-
-button {
-    font-size: 24px;
-    padding: 18px 30px;
-    margin: 10px;
-    border-radius: 15px;
-    border: none;
-    cursor: pointer;
-}
-
-#start {
-    background: #4CAF50;
-    color: white;
-}
-
-#stop {
-    background: #d9534f;
-    color: white;
-}
-
-.meter {
-    width: 100%;
-    height: 45px;
-    background: #333;
-    border-radius: 15px;
-    overflow: hidden;
-    margin: 30px 0;
-}
-
-#level {
-    width: 0%;
-    height: 100%;
-    background: #4CAF50;
-}
-
-.info {
-    font-size: 20px;
-    margin: 15px;
-}
-
-#log {
-    text-align: left;
-    background: #1d222d;
-    padding: 15px;
-    border-radius: 10px;
-    min-height: 120px;
-    margin-top: 25px;
-    font-family: monospace;
-    font-size: 16px;
-}
+body{font-family:Arial,sans-serif;background:#10131a;color:#fff;margin:0;padding:24px 14px}
+.container{max-width:820px;margin:auto}
+h1{text-align:center}.subtitle{text-align:center;opacity:.8}
+.status{font-size:28px;font-weight:bold;text-align:center;margin:22px 0}
+.timer{font-size:48px;font-weight:bold;text-align:center;font-variant-numeric:tabular-nums}
+.controls{text-align:center}button{font-size:22px;padding:16px 24px;margin:7px;border:0;border-radius:14px}
+#start{background:#4CAF50;color:#fff}#stop{background:#d9534f;color:#fff}
+.meter{width:100%;height:44px;background:#333;border-radius:14px;overflow:hidden;margin:18px 0}
+#level{width:0;height:100%;background:#4CAF50;transition:width .06s linear}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:18px 0}
+.card{background:#1d222d;border-radius:12px;padding:12px 14px}
+.label{opacity:.72;font-size:14px}.value{font-size:20px;font-weight:bold;margin-top:4px;overflow-wrap:anywhere}
+#log{background:#1d222d;padding:14px;border-radius:10px;min-height:170px;max-height:360px;overflow-y:auto;font-family:monospace;font-size:14px;line-height:1.45}
+.note{background:#252c39;padding:12px 14px;border-radius:10px;font-size:15px;line-height:1.4}
 </style>
 </head>
-
 <body>
-
 <div class="container">
-
 <h1>🎤 Test stabilité Micro</h1>
-<p>Echo Show 15 / Amazon Silk</p>
-
-<div id="status" class="status">
-⚪ Micro non démarré
-</div>
-
-<div id="timer" class="timer">
-00:00:00
-</div>
-
+<p class="subtitle">Echo Show 15 / Amazon Silk — diagnostic longue durée</p>
+<div id="status" class="status">⚪ Micro non démarré</div>
+<div id="timer" class="timer">00:00:00</div>
+<div class="controls">
 <button id="start">Activer le microphone</button>
 <button id="stop" disabled>Arrêter</button>
+</div>
 
 <h2>Niveau sonore</h2>
+<div class="meter"><div id="level"></div></div>
 
-<div class="meter">
-    <div id="level"></div>
+<div class="grid">
+<div class="card"><div class="label">Interruptions piste micro</div><div class="value" id="interruptions">0</div></div>
+<div class="card"><div class="label">Dernier signal audio</div><div class="value" id="lastSignal">—</div></div>
+<div class="card"><div class="label">État piste audio</div><div class="value" id="trackState">—</div></div>
+<div class="card"><div class="label">AudioContext</div><div class="value" id="audioContextState">—</div></div>
+<div class="card"><div class="label">Page visible</div><div class="value" id="visibilityState">—</div></div>
+<div class="card"><div class="label">Fenêtre active</div><div class="value" id="focusState">—</div></div>
+<div class="card"><div class="label">Mises en arrière-plan</div><div class="value" id="hiddenCount">0</div></div>
+<div class="card"><div class="label">Plus grand trou d'exécution</div><div class="value" id="maxGap">0 s</div></div>
+<div class="card"><div class="label">Dernier heartbeat JS</div><div class="value" id="heartbeat">—</div></div>
+<div class="card"><div class="label">Rechargements détectés</div><div class="value" id="reloadCount">0</div></div>
 </div>
 
-<div class="info">
-Interruptions détectées :
-<strong id="interruptions">0</strong>
-</div>
-
-<div class="info">
-Dernier signal audio :
-<strong id="lastSignal">—</strong>
-</div>
+<div class="note"><strong>But :</strong> détecter si Fire OS masque, suspend, recharge ou coupe Silk/micro pendant une longue période d'inactivité.</div>
 
 <h2>Journal</h2>
-
 <div id="log"></div>
-
 </div>
 
 <script>
+let stream=null,audioContext=null,analyser=null,microphone=null,timerInterval=null,heartbeatInterval=null,startTime=null,interruptions=0,hiddenCount=0,maxGapMs=0,animationId=null,lastHeartbeatTs=Date.now();
 
-let stream;
-let audioContext;
-let analyser;
-let microphone;
-let timerInterval;
-let startTime;
-let interruptions = 0;
-let animationId;
+const $=id=>document.getElementById(id);
+const statusEl=$("status"),timerEl=$("timer"),levelEl=$("level"),logEl=$("log"),interruptionEl=$("interruptions"),lastSignalEl=$("lastSignal"),trackStateEl=$("trackState"),audioContextStateEl=$("audioContextState"),visibilityStateEl=$("visibilityState"),focusStateEl=$("focusState"),hiddenCountEl=$("hiddenCount"),maxGapEl=$("maxGap"),heartbeatEl=$("heartbeat"),reloadCountEl=$("reloadCount");
 
-const statusEl = document.getElementById("status");
-const timerEl = document.getElementById("timer");
-const levelEl = document.getElementById("level");
-const logEl = document.getElementById("log");
-const interruptionEl = document.getElementById("interruptions");
-const lastSignalEl = document.getElementById("lastSignal");
+function nowText(){return new Date().toLocaleTimeString()}
+function log(m){const d=document.createElement("div");d.textContent="["+nowText()+"] "+m;logEl.prepend(d)}
+function fmt(ms){const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")}
+function updateTimer(){if(startTime)timerEl.textContent=fmt(Date.now()-startTime)}
+function updatePageState(){visibilityStateEl.textContent=document.visibilityState;focusStateEl.textContent=document.hasFocus()?"Oui":"Non"}
+function updateTrackState(){if(!stream){trackStateEl.textContent="—";return}const t=stream.getAudioTracks()[0];trackStateEl.textContent=t?t.readyState+(t.muted?" / muted":" / actif")+(t.enabled?"":" / disabled"):"Aucune piste"}
+function updateAudioContextState(){audioContextStateEl.textContent=audioContext?audioContext.state:"—"}
 
-function log(message) {
-    const time = new Date().toLocaleTimeString();
-    logEl.innerHTML =
-        "[" + time + "] " + message + "<br>" + logEl.innerHTML;
+function heartbeat(){
+  const now=Date.now(),gap=now-lastHeartbeatTs;
+  if(gap>4000){
+    if(gap>maxGapMs){maxGapMs=gap;maxGapEl.textContent=(maxGapMs/1000).toFixed(1)+" s"}
+    log("⚠️ Trou d'exécution JavaScript détecté : "+(gap/1000).toFixed(1)+" s");
+  }
+  lastHeartbeatTs=now;
+  heartbeatEl.textContent=nowText();
+  localStorage.setItem("echoMicLastHeartbeat",String(now));
 }
 
-function updateTimer() {
+async function startMicrophone(){
+  try{
+    log("Demande d'accès au microphone...");
+    stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    statusEl.textContent="🟢 MICRO ACTIF";
+    log("Microphone autorisé et flux audio ouvert.");
+    startTime=Date.now();
+    timerInterval=setInterval(updateTimer,1000);
+    lastHeartbeatTs=Date.now();
+    heartbeatInterval=setInterval(heartbeat,1000);
+    $("start").disabled=true;$("stop").disabled=false;
 
-    const elapsed = Date.now() - startTime;
+    audioContext=new (window.AudioContext||window.webkitAudioContext)();
+    analyser=audioContext.createAnalyser();
+    microphone=audioContext.createMediaStreamSource(stream);
+    microphone.connect(analyser);
+    analyser.fftSize=256;
 
-    const hours =
-        Math.floor(elapsed / 3600000);
+    audioContext.addEventListener("statechange",()=>{updateAudioContextState();log("AudioContext → "+audioContext.state)});
 
-    const minutes =
-        Math.floor((elapsed % 3600000) / 60000);
+    const dataArray=new Uint8Array(analyser.frequencyBinCount);
+    const track=stream.getAudioTracks()[0];
+    track.onended=()=>{interruptions++;interruptionEl.textContent=interruptions;statusEl.textContent="🔴 MICRO COUPÉ";updateTrackState();log("🚨 Piste microphone terminée.")};
+    track.onmute=()=>{interruptions++;interruptionEl.textContent=interruptions;statusEl.textContent="🟠 MICRO MUET";updateTrackState();log("⚠️ Microphone mis en sourdine.")};
+    track.onunmute=()=>{statusEl.textContent="🟢 MICRO ACTIF";updateTrackState();log("Microphone réactivé.")};
 
-    const seconds =
-        Math.floor((elapsed % 60000) / 1000);
-
-    timerEl.textContent =
-        String(hours).padStart(2,"0") + ":" +
-        String(minutes).padStart(2,"0") + ":" +
-        String(seconds).padStart(2,"0");
+    function analyse(){
+      analyser.getByteFrequencyData(dataArray);
+      let sum=0;for(let i=0;i<dataArray.length;i++)sum+=dataArray[i];
+      const avg=sum/dataArray.length,pct=Math.min(100,avg*2);
+      levelEl.style.width=pct+"%";
+      if(avg>5)lastSignalEl.textContent=nowText();
+      updateTrackState();
+      animationId=requestAnimationFrame(analyse);
+    }
+    updateAudioContextState();updateTrackState();analyse();
+  }catch(e){
+    statusEl.textContent="🔴 ACCÈS MICRO IMPOSSIBLE";
+    log("ERREUR : "+e.name+" - "+e.message);
+  }
 }
 
-async function startMicrophone() {
-
-    try {
-
-        log("Demande d'accès au microphone...");
-
-        stream =
-            await navigator.mediaDevices.getUserMedia({
-                audio: true
-            });
-
-        statusEl.textContent =
-            "🟢 MICRO ACTIF";
-
-        log("Microphone autorisé et flux audio ouvert.");
-
-        startTime = Date.now();
-
-        timerInterval =
-            setInterval(updateTimer,1000);
-
-        document.getElementById("start").disabled = true;
-        document.getElementById("stop").disabled = false;
-
-        audioContext =
-            new (window.AudioContext ||
-                 window.webkitAudioContext)();
-
-        analyser =
-            audioContext.createAnalyser();
-
-        microphone =
-            audioContext.createMediaStreamSource(stream);
-
-        microphone.connect(analyser);
-
-        analyser.fftSize = 256;
-
-        const dataArray =
-            new Uint8Array(analyser.frequencyBinCount);
-
-        const track =
-            stream.getAudioTracks()[0];
-
-        track.onended = function() {
-
-            interruptions++;
-
-            interruptionEl.textContent =
-                interruptions;
-
-            statusEl.textContent =
-                "🔴 MICRO COUPÉ";
-
-            log("ALERTE : piste microphone interrompue.");
-        };
-
-        track.onmute = function() {
-
-            interruptions++;
-
-            interruptionEl.textContent =
-                interruptions;
-
-            statusEl.textContent =
-                "🟠 MICRO MUET";
-
-            log("ALERTE : microphone mis en sourdine.");
-        };
-
-        track.onunmute = function() {
-
-            statusEl.textContent =
-                "🟢 MICRO ACTIF";
-
-            log("Microphone réactivé.");
-        };
-
-        function analyse() {
-
-            analyser.getByteFrequencyData(dataArray);
-
-            let sum = 0;
-
-            for(let i = 0; i < dataArray.length; i++) {
-                sum += dataArray[i];
-            }
-
-            const average =
-                sum / dataArray.length;
-
-            const percent =
-                Math.min(100, average * 2);
-
-            levelEl.style.width =
-                percent + "%";
-
-            if(average > 5) {
-
-                lastSignalEl.textContent =
-                    new Date().toLocaleTimeString();
-            }
-
-            animationId =
-                requestAnimationFrame(analyse);
-        }
-
-        analyse();
-
-    }
-
-    catch(error) {
-
-        statusEl.textContent =
-            "🔴 ACCÈS MICRO IMPOSSIBLE";
-
-        log(
-            "ERREUR : " +
-            error.name +
-            " - " +
-            error.message
-        );
-    }
+function stopMicrophone(){
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  if(audioContext&&audioContext.state!=="closed")audioContext.close();
+  clearInterval(timerInterval);clearInterval(heartbeatInterval);cancelAnimationFrame(animationId);
+  stream=null;audioContext=null;startTime=null;
+  statusEl.textContent="⚪ Micro arrêté";levelEl.style.width="0%";trackStateEl.textContent="—";audioContextStateEl.textContent="—";
+  $("start").disabled=false;$("stop").disabled=true;
+  log("Test arrêté manuellement.");
 }
 
-function stopMicrophone() {
+document.addEventListener("visibilitychange",()=>{
+  updatePageState();
+  if(document.hidden){hiddenCount++;hiddenCountEl.textContent=hiddenCount;log("Page passée en arrière-plan / masquée.")}
+  else{log("Page redevenue visible.");heartbeat();}
+});
+window.addEventListener("focus",()=>{updatePageState();log("Fenêtre redevenue active.")});
+window.addEventListener("blur",()=>{updatePageState();log("Fenêtre devenue inactive.")});
+window.addEventListener("pagehide",e=>log("Événement pagehide"+(e.persisted?" (bfcache)":"")+"."));
+window.addEventListener("pageshow",e=>{updatePageState();log("Événement pageshow"+(e.persisted?" (retour bfcache)":"")+".");heartbeat();});
+document.addEventListener("freeze",()=>log("🚨 Événement freeze détecté."));
+document.addEventListener("resume",()=>{log("✅ Événement resume détecté.");heartbeat();});
 
-    if(stream) {
+const previousHeartbeat=Number(localStorage.getItem("echoMicLastHeartbeat")||0);
+let reloadCount=Number(localStorage.getItem("echoMicReloadCount")||0);
+if(previousHeartbeat>0){reloadCount++;localStorage.setItem("echoMicReloadCount",String(reloadCount))}
+reloadCountEl.textContent=reloadCount;
 
-        stream.getTracks().forEach(
-            track => track.stop()
-        );
-    }
+$("start").addEventListener("click",startMicrophone);
+$("stop").addEventListener("click",stopMicrophone);
 
-    if(audioContext) {
-        audioContext.close();
-    }
-
-    clearInterval(timerInterval);
-
-    cancelAnimationFrame(animationId);
-
-    statusEl.textContent =
-        "⚪ Micro arrêté";
-
-    levelEl.style.width =
-        "0%";
-
-    document.getElementById("start").disabled = false;
-    document.getElementById("stop").disabled = true;
-
-    log("Test arrêté manuellement.");
-}
-
-document
-.getElementById("start")
-.addEventListener(
-    "click",
-    startMicrophone
-);
-
-document
-.getElementById("stop")
-.addEventListener(
-    "click",
-    stopMicrophone
-);
-
-log("Page chargée. Prêt pour le test.");
-
+updatePageState();heartbeatEl.textContent=nowText();log("Page chargée. Diagnostic prêt.");
+if(previousHeartbeat>0)log("Dernier heartbeat précédent il y a "+((Date.now()-previousHeartbeat)/1000).toFixed(1)+" s.");
 </script>
-
 </body>
 </html>
